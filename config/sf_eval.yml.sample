@@ -1,0 +1,14 @@
+"spam_assassin_corpus_reader":
+  #"corpus_dir": /path/to/files/spamassassin_corpus
+  #"svm_corpus_dir": /path/to/files/svm_corpus
+  "max_doc_num": 10
+  #"max_doc_num": 300
+"svm_corpus_generator":
+  "word_count": true
+  "tf": true
+"weka":
+  #"jar": /Applications/MacPorts/Weka.app/Contents/Resources/Java/weka.jar
+"svm_perf":
+  #"svm_perf_classify": /path/to/command/svm_perf_classify
+  #"svm_perf_learn": /path/to/command/svm_perf_learn
+  "svm_result_file": svm_result.txt
