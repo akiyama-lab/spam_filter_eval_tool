@@ -1,7 +1,9 @@
 #!/usr/bin/env ruby
+# -*- coding: utf-8 -*-
 
 require 'yaml'
 require 'fileutils'
+require 'systemu'
 
 module SpamFilterEvalTool
   class ConfigFile
@@ -28,7 +30,15 @@ module SpamFilterEvalTool
         "svm_perf" => {
           "svm_classify" => "#{ENV["HOME"]}/local/bin/svm_perf_classify",
           "svm_learn" => "#{ENV["HOME"]}/local/bin/svm_perf_learn",
-          "svm_result_file" => "svm_result.txt"
+          "svm_result_file" => "svm_result.txt",
+          "feature_vector" => "tf"
+        },
+        "bogofilter" => {
+          "bogofilter" => "/opt/local/bin/bogofilter",
+          "db_dir" => ".",
+          "bogofilter_result_file" => "bogofilter_result.txt",
+          "conv_to_fw_svmlight" => "#{ROOT_PATH}/script/conv_to_fw.rb",
+          "conv_to_fw_svmlight_option" => "remove_words"
         }
       }
       config = YAML.load_file(config_path)
@@ -49,6 +59,10 @@ module SpamFilterEvalTool
 
       def src_doc
         "#{attrs["corpus_dir"]}/#{attrs["corpus_name"]}/#{attrs["number"]}.#{attrs["hash"]}"
+      end
+
+      def file
+        src_doc
       end
 
       def svm_doc
@@ -218,6 +232,10 @@ module SpamFilterEvalTool
       system(command)
     end
 
+    def tf_fname
+      "tf.arff"
+    end
+
     def conv_to_svmlight(dir)
       command = "#{@options["conv_to_svmlight"]} #{dir}/tf.arff > #{dir}/#{svmlight_fname}"
       $stderr.puts(command)
@@ -307,7 +325,7 @@ module SpamFilterEvalTool
           exit 1
         end
       end
-      class_name = (spamicity >= threshold) ? "spam" : "ham"
+      class_name = (spamicity <= threshold) ? "spam" : "ham"
       [class_name, spamicity]
     end
 
@@ -317,13 +335,28 @@ module SpamFilterEvalTool
         model = "#{svm_span_corpus_dir}/model"
         precision = "#{svm_span_corpus_dir}/precision"
         # svm_perf_learn
-        @svm_perf.learn("#{svm_span_corpus_dir}/#{@weka.svmlight_fname}",
-                        model)
+        case @svm_perf.params["feature_vector"]
+        when "tf"
+          @svm_perf.learn("#{svm_span_corpus_dir}/#{@weka.svmlight_fname}",
+                          model)
+        when "fw"
+          next if di < 2
+          @svm_perf.learn("#{svm_span_corpus_dir}/fw.txt",
+                          model)
+        end
 
         # svm_perf_classify
-        @svm_perf.classify("#{doc.svm_doc_dir}/#{@weka.svmlight_fname}",
-                           model,
-                           precision)
+        case @svm_perf.params["feature_vector"]
+        when "tf"
+          @svm_perf.classify("#{doc.svm_doc_dir}/#{@weka.svmlight_fname}",
+                             model,
+                             precision)
+        when "fw"
+          next if di < 2
+          @svm_perf.classify("#{doc.svm_doc_dir}/fw.txt",
+                             model,
+                             precision)
+        end
 
         # extract smapicigy and output to result
         threshold = threshold(model)
@@ -339,9 +372,101 @@ module SpamFilterEvalTool
     end
   end
 
+  class Bogofilter
+    attr_accessor :params
+    def initialize(options)
+      @params = {
+        "bogofilter" => "/opt/local/bin/bogofilter",
+        "db_dir" => ".",
+        "bogofilter_result_file" => "bogofilter_result.txt"
+      }.merge(options)
+      @bogofilter = @params["bogofilter"]
+    end
+
+    def classify(file)
+      command = "#{@bogofilter} -vvv -d #{@params["db_dir"]} -p < #{file} | #{ROOT_PATH}/script/nkf.rb -w"
+      $stderr.puts(command)
+      `#{command}`
+    end
+
+    def learn(class_name, file)
+      command = ""
+      case class_name
+      when "spam"
+        command = "#{@bogofilter} -vvv -d #{@params["db_dir"]} -s < #{file} | #{ROOT_PATH}/script/nkf.rb -w"
+      when "ham"
+        command = "#{@bogofilter} -vvv -d #{@params["db_dir"]} -n < #{file} | #{ROOT_PATH}/script/nkf.rb -w"
+      end
+      $stderr.puts(command)
+      `#{command}`
+    end
+  end
+
   class BogofilterEvalExecutor
-    def initialize
+    def initialize(sac_reader, weka, bogofilter, min_learn = 2)
+      @sac_reader = sac_reader
+      @weka = weka
+      @bogofilter = bogofilter
+      @bogofilter_result_file = @bogofilter.params["bogofilter_result_file"]
+      @conv_to_fw_svmlight = @bogofilter.params["conv_to_fw_svmlight"]
+      @conv_to_fw_svmlight_option = @bogofilter.params["conv_to_fw_svmlight_option"]
+      @min_learn = min_learn
       @results = []
+    end
+
+    def conv_to_fw_svmlight(dir, tf_file = "tf.arff", fw_file = "fw.txt")
+      # for debug
+      #command = "#{ROOT_PATH}/script/nkf.rb -w > #{dir}/#{fw_file}"
+      command = "#{@conv_to_fw_svmlight} #{dir}/#{tf_file} #{@conv_to_fw_svmlight_option} > #{dir}/#{fw_file}"
+      $stderr.puts(command)
+      command
+    end
+
+    def evaluate
+      @sac_reader.documents.each_with_index do |doc, di|
+        classify_result = nil
+        # does not execute classify before finishing to learn document more than @min_learn
+        if di >= @min_learn
+          # classify
+          class_name = ""
+          spamicity = 0.0
+          classify_result = @bogofilter.classify(doc.file)
+          # for debug
+          $stderr.puts classify_result
+          #classify_result.encode("UTF-8", "UTF-8", invalid: :replace, undef: :replace, replace: '.').split("\n").each do |line|
+          classify_result.split("\n").each do |line|
+            match1 = line.match(/.*X-Bogosity: (.*), tests.*/)
+            if match1
+              class_name = ($1.downcase == "spam") ? "spam" : "ham"
+            end
+            match2 = line.match(/tests.*, spamicity=(.*), version.*/)
+            if match2
+              spamicity = $1.to_f
+            end
+            if match1 || match2
+              break
+            end
+          end
+          class_name = "ham" if class_name.empty?
+          @results << "#{doc.attrs["path"]} judge=#{doc.attrs["class"]} class=#{class_name} score=#{"%0.8f" % spamicity}"
+          svm_span_corpus_dir = @sac_reader.svm_span_corpus_dir(di)
+          status, stdout, stderr = systemu conv_to_fw_svmlight(svm_span_corpus_dir, @weka.tf_fname), 0=>classify_result
+          $stderr.puts [status, stdout, stderr].inspect
+        end
+
+        # learn
+        learn_result = @bogofilter.learn(doc.attrs["class"], doc.file)
+        # for debug
+        $stderr.puts learn_result
+        status, stdout, stderr = systemu conv_to_fw_svmlight(doc.svm_doc_dir, @weka.tf_fname), 0=>classify_result
+        $stderr.puts [status, stdout, stderr].inspect
+      end
+    end
+
+    def output_result
+      open(@bogofilter_result_file, "a+") do |f|
+        f.puts @results.join("\n")
+      end
     end
   end
 end

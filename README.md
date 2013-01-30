@@ -10,6 +10,17 @@ First of all, clone the repository.
 
     % git clone https://github.com/akiyama-lab/spam_filter_eval_tool.git
     % cd spam_filter_eval_tool
+    % bundle install
+
+You need to patch bogofilter before using with this tool.
+
+    % cd ..
+    % tar jxvf bogofilter-1.2.3.tar.bz
+    % cd bogofilter-1.2.3
+    % patch -p1 < ../spam_filter_eval_tool/patch/patch-for-bogofilter-1.2.3.patch
+    % ./configure --with-database=sqlite3 --with-libsqlite3-prefix=/opt/local --with-libiconv-prefix=/opt/local --without-libdb-prefix --without-libqdbm-prefix --prefix=$HOME/local
+    % make
+    % make install
 
 ## Configuration
 

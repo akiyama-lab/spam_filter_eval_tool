@@ -1,0 +1,12 @@
+--- bogofilter-1.2.3/src/rstats.c	2009-02-22 06:11:02.000000000 +0900
++++ bogofilter-1.2.3-modified/src/rstats.c	2013-01-30 15:54:17.000000000 +0900
+@@ -121,6 +121,9 @@
+     if (r1->prob > r2->prob) return 1;
+     if (r2->prob > r1->prob) return -1;
+ 
++    if (r2->token == NULL) return 1;
++    if (r1->token == NULL) return -1;
++
+     return word_cmp(r1->token, r2->token);
+ }
+ 

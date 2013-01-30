@@ -1,0 +1,6 @@
+.bundle
+files/*
+log/*
+tmp/
+*~
+*.swp
