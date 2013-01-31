@@ -258,6 +258,7 @@ module SpamFilterEvalTool
 
     def conv_to_svmlight
       @sac_reader.documents.each_with_index do |doc, di|
+        @weka.conv_to_svmlight(doc.svm_doc_dir)
         svm_span_corpus_dir = @sac_reader.svm_span_corpus_dir(di)
         @weka.conv_to_svmlight(svm_span_corpus_dir)
       end
