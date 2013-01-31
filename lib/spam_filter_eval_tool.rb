@@ -405,13 +405,14 @@ module SpamFilterEvalTool
           exit 1
         end
       end
-      class_name = (spamicity >= threshold) ? "spam" : "ham"
+      class_name = (spamicity <= threshold) ? "spam" : "ham"
       [class_name, spamicity]
     end
 
     def evaluate
       @sac_reader.documents.each_with_index do |doc, di|
-        svm_span_corpus_dir = @sac_reader.svm_span_corpus_dir(di)
+        next if di == 0
+        svm_span_corpus_dir = @sac_reader.svm_span_corpus_dir(di-1)
         model = "#{svm_span_corpus_dir}/model"
         precision = "#{svm_span_corpus_dir}/precision"
         # svm_perf_learn
@@ -420,7 +421,7 @@ module SpamFilterEvalTool
           @svm_perf.learn("#{svm_span_corpus_dir}/#{@weka.svmlight_fname}",
                           model)
         when "fw"
-          next if di < 2
+          next if di < 3
           @svm_perf.learn("#{svm_span_corpus_dir}/fw.txt",
                           model)
         end
@@ -432,13 +433,13 @@ module SpamFilterEvalTool
                              model,
                              precision)
         when "fw"
-          next if di < 2
+          next if di < 3
           @svm_perf.classify("#{doc.svm_doc_dir}/fw.txt",
                              model,
                              precision)
         end
 
-        # extract smapicigy and output to result
+        # extract smapicity and output to result
         threshold = threshold(model)
         class_name, spamicity = class_and_spamicity(precision, threshold)
         @results << "#{doc.attrs["path"]} judge=#{doc.attrs["class"]} class=#{class_name} score=#{"%0.8f" % spamicity}"
