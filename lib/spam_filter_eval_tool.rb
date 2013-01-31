@@ -6,6 +6,8 @@ require 'fileutils'
 require 'systemu'
 
 module SpamFilterEvalTool
+  NKF_SCRIPT = "#{ROOT_PATH}/script/nkf.rb"
+
   class ConfigFile
     ROOT_PATH = File.expand_path('../../',  __FILE__)
     attr_reader :params
@@ -237,7 +239,7 @@ module SpamFilterEvalTool
     end
 
     def conv_to_svmlight(dir)
-      command = "#{@options["conv_to_svmlight"]} #{dir}/tf.arff > #{dir}/#{svmlight_fname}"
+      command = "#{NKF_SCRIPT} -w #{dir}/tf.arff | #{@options["conv_to_svmlight"]} > #{dir}/#{svmlight_fname}"
       $stderr.puts(command)
       system(command)
     end
@@ -246,6 +248,22 @@ module SpamFilterEvalTool
       "tf.txt"
     end
   end
+
+
+  class TfConverter
+    def initialize(sac_reader, weka)
+      @sac_reader = sac_reader
+      @weka = weka
+    end
+
+    def conv_to_svmlight
+      @sac_reader.documents.each_with_index do |doc, di|
+        svm_span_corpus_dir = @sac_reader.svm_span_corpus_dir(di)
+        @weka.conv_to_svmlight(svm_span_corpus_dir)
+      end
+    end
+  end
+
 
   class SvmPerf
     attr_accessor :params
@@ -384,7 +402,7 @@ module SpamFilterEvalTool
     end
 
     def classify(file)
-      command = "#{@bogofilter} -vvv -d #{@params["db_dir"]} -p < #{file} | #{ROOT_PATH}/script/nkf.rb -w"
+      command = "#{@bogofilter} -vvv -d #{@params["db_dir"]} -p < #{file} | #{NKF_SCRIPT} -w"
       $stderr.puts(command)
       `#{command}`
     end
@@ -393,9 +411,9 @@ module SpamFilterEvalTool
       command = ""
       case class_name
       when "spam"
-        command = "#{@bogofilter} -vvv -d #{@params["db_dir"]} -s < #{file} | #{ROOT_PATH}/script/nkf.rb -w"
+        command = "#{@bogofilter} -vvv -d #{@params["db_dir"]} -s < #{file} | #{NKF_SCRIPT} -w"
       when "ham"
-        command = "#{@bogofilter} -vvv -d #{@params["db_dir"]} -n < #{file} | #{ROOT_PATH}/script/nkf.rb -w"
+        command = "#{@bogofilter} -vvv -d #{@params["db_dir"]} -n < #{file} | #{NKF_SCRIPT} -w"
       end
       $stderr.puts(command)
       `#{command}`
@@ -416,7 +434,7 @@ module SpamFilterEvalTool
 
     def conv_to_fw_svmlight(dir, tf_file = "tf.arff", fw_file = "fw.txt")
       # for debug
-      #command = "#{ROOT_PATH}/script/nkf.rb -w > #{dir}/#{fw_file}"
+      #command = "#{NKF_SCRIPT} -w > #{dir}/#{fw_file}"
       command = "#{@conv_to_fw_svmlight} #{dir}/#{tf_file} #{@conv_to_fw_svmlight_option} > #{dir}/#{fw_file}"
       $stderr.puts(command)
       command

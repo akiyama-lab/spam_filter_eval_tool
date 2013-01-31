@@ -14,6 +14,11 @@ task :clear_fw do
   rm Dir.glob("**/fw.txt"), :force => true
 end
 
+desc "clear tf.txt"
+task :clear_tf do
+  rm Dir.glob("**/tf.txt"), :force => true
+end
+
 desc "clear bogofilter results and db"
 task :clear_bogofilter => :init do
   rm "#{$config.params["bogofilter"]["bogofilter_result_file"]}", :force => true
