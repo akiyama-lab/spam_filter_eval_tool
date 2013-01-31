@@ -36,7 +36,16 @@ corpus_dir, svm_corpus_dir, jar (weka), svm_perf_classify, svm_perf_learn should
 Generate a corpus for SVM Light
 
     % ./script/generate_svm_corpus.rb
+    % ./script/convert_tf_to_svmlight.rb
+
+Evaluage Bogofilter and create fw.txt files
+
+    % ./script/eval_bogofilter.rb
 
 Evaluate SVM Light
 
     % ./script/eval_svmlight.rb
+
+## How to clear data
+
+    % rake --tasks

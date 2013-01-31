@@ -4,6 +4,7 @@
 require 'yaml'
 require 'fileutils'
 require 'systemu'
+require 'nkf'
 
 module SpamFilterEvalTool
   NKF_SCRIPT = "#{ROOT_PATH}/script/nkf.rb"
@@ -170,14 +171,14 @@ module SpamFilterEvalTool
         svm_doc_dir = doc.svm_doc_dir
         if !File.exists?(svm_doc_dir)
           FileUtils.mkpath(svm_doc_dir)
-          @sac_reader.classes.keys.each do |class_name|
-            FileUtils.mkpath("#{svm_doc_dir}/#{class_name}")
-          end
+          #@sac_reader.classes.keys.each do |class_name|
+          #  FileUtils.mkpath("#{svm_doc_dir}/#{class_name}")
+          #end
         end
-        command = "ln -s #{src_doc} #{doc.svm_doc}"
-        $stderr.puts(command)
-        system(command)
-        process_weka(svm_doc_dir)
+        #command = "ln -s #{src_doc} #{doc.svm_doc}"
+        #$stderr.puts(command)
+        #system(command)
+        #process_weka(svm_doc_dir)
       end
     end
 
@@ -186,17 +187,21 @@ module SpamFilterEvalTool
         svm_span_corpus_dir = @sac_reader.svm_span_corpus_dir(di)
         if !File.exists?(svm_span_corpus_dir)
           FileUtils.mkpath(svm_span_corpus_dir)
-          @sac_reader.classes.keys.each do |class_name|
-            FileUtils.mkpath("#{svm_span_corpus_dir}/#{class_name}")
+          if di == (@sac_reader.documents.size-1)
+            @sac_reader.classes.keys.each do |class_name|
+              FileUtils.mkpath("#{svm_span_corpus_dir}/#{class_name}")
+            end
           end
         end
-        (0..di).each do |i|
-          doc = @sac_reader.documents[i]
-          command = "ln -s #{doc.src_doc} #{@sac_reader.svm_span_corpus_doc(di, doc, i)}"
-          $stderr.puts(command)
-          system(command)
+        if di == (@sac_reader.documents.size-1)
+          (0..di).each do |i|
+            doc = @sac_reader.documents[i]
+            command = "ln -s #{doc.src_doc} #{@sac_reader.svm_span_corpus_doc(di, doc, i)}"
+            $stderr.puts(command)
+            system(command)
+          end
+          process_weka(svm_span_corpus_dir)
         end
-        process_weka(svm_span_corpus_dir)
       end
     end
   end
@@ -208,18 +213,23 @@ module SpamFilterEvalTool
     def initialize(options)
       @options = {
         "jar" => "/Applications/MacPorts/Weka.app/Contents/Resources/Java/weka.jar",
-        "conv_to_svmlight" => "#{ROOT_PATH}/script/conv_to_svmlight.rb"
+        "conv_to_svmlight" => "#{ROOT_PATH}/script/conv_to_svmlight.rb",
+        "sort_text_arff" => "#{ROOT_PATH}/script/sort_text_arff.rb"
       }.merge(options)
     end
 
     def text_loader(dir)
-      command = "java -classpath #{@options["jar"]} weka.core.converters.TextDirectoryLoader -F -D -dir #{dir} > #{dir}/text.arff"
+      command = "java -classpath #{@options["jar"]} weka.core.converters.TextDirectoryLoader -F -D -dir #{dir} | #{@options["sort_text_arff"]} > #{dir}/#{text_fname}"
       $stderr.puts(command)
       system(command)
     end
 
+    def text_fname
+      "text.arff"
+    end
+
     def word_count(dir)
-      command = "java -classpath #{@options["jar"]} weka.filters.unsupervised.attribute.StringToWordVector -C -i #{dir}/text.arff -o #{dir}/#{word_count_fname}"
+      command = "java -classpath #{@options["jar"]} weka.filters.unsupervised.attribute.StringToWordVector -C -i #{dir}/#{text_fname} -o #{dir}/#{word_count_fname}"
       $stderr.puts(command)
       system(command)
     end
@@ -229,7 +239,7 @@ module SpamFilterEvalTool
     end
 
     def tf(dir)
-      command = "java -classpath #{@options["jar"]} weka.filters.unsupervised.attribute.StringToWordVector -T -i #{dir}/text.arff -o #{dir}/tf.arff"
+      command = "java -classpath #{@options["jar"]} weka.filters.unsupervised.attribute.StringToWordVector -T -i #{dir}/#{text_fname} -o #{dir}/#{tf_fname}"
       $stderr.puts(command)
       system(command)
     end
@@ -239,7 +249,7 @@ module SpamFilterEvalTool
     end
 
     def conv_to_svmlight(dir)
-      command = "#{NKF_SCRIPT} -w #{dir}/tf.arff | #{@options["conv_to_svmlight"]} > #{dir}/#{svmlight_fname}"
+      command = "#{NKF_SCRIPT} -w #{dir}/#{tf_fname} | #{@options["conv_to_svmlight"]} > #{dir}/#{svmlight_fname}"
       $stderr.puts(command)
       system(command)
     end
@@ -254,13 +264,64 @@ module SpamFilterEvalTool
     def initialize(sac_reader, weka)
       @sac_reader = sac_reader
       @weka = weka
+      @tf_headers = []
+      @tf_values = []
+      @svmlight_values = []
     end
 
     def conv_to_svmlight
-      @sac_reader.documents.each_with_index do |doc, di|
-        @weka.conv_to_svmlight(doc.svm_doc_dir)
-        svm_span_corpus_dir = @sac_reader.svm_span_corpus_dir(di)
+      di = @sac_reader.documents.size-1
+      svm_span_corpus_dir = @sac_reader.svm_span_corpus_dir(di)
+      tf_file = "#{svm_span_corpus_dir}/#{@weka.tf_fname}"
+      svmlight_file = "#{svm_span_corpus_dir}/#{@weka.svmlight_fname}"
+      if !File.exist?(svmlight_file)
         @weka.conv_to_svmlight(svm_span_corpus_dir)
+      end
+      tf_lines = open(tf_file).readlines
+      tf_lines.each do |line|
+        match = NKF.nkf("-w", line).match(/^\{([^\}]+)\}$/)
+        if match.nil?
+          @tf_headers << line
+          next
+        end
+        @tf_values << line
+      end
+      @svmlight_values = open(svmlight_file).readlines
+      # @sac_reader.documents.each_with_index do |doc, di|
+      #   @weka.conv_to_svmlight(doc.svm_doc_dir)
+      #   svm_span_corpus_dir = @sac_reader.svm_span_corpus_dir(di)
+      #   @weka.conv_to_svmlight(svm_span_corpus_dir)
+      # end
+    end
+
+    def split_and_copy
+      @sac_reader.documents.each_with_index do |doc, di|
+        # create tf.arff for doc
+        svm_doc_dir_tf = "#{doc.svm_doc_dir}/#{@weka.tf_fname}"
+        $stderr.puts "create #{svm_doc_dir_tf}"
+        open(svm_doc_dir_tf, "w") do |f|
+          f.puts @tf_headers.join
+          f.puts @tf_values[di]
+        end
+        # create tf.txt for doc
+        svm_doc_dir_svmlight = "#{doc.svm_doc_dir}/#{@weka.svmlight_fname}"
+        $stderr.puts "create #{svm_doc_dir_svmlight}"
+        open(svm_doc_dir_svmlight, "w") do |f|
+          f.puts @svmlight_values[di]
+        end
+        # create tf.arff for span_corpus
+        svm_span_corpus_dir_tf = "#{@sac_reader.svm_span_corpus_dir(di)}/#{@weka.tf_fname}"
+        $stderr.puts "create #{svm_span_corpus_dir_tf}"
+        open(svm_span_corpus_dir_tf, "w") do |f|
+          f.puts @tf_headers.join
+          f.puts @tf_values[0..di].join
+        end
+        # create tf.txt for span_corpus
+        svm_span_corpus_dir_svmlight = "#{@sac_reader.svm_span_corpus_dir(di)}/#{@weka.svmlight_fname}"
+        $stderr.puts "create #{svm_span_corpus_dir_svmlight}"
+        open(svm_span_corpus_dir_svmlight, "w") do |f|
+          f.puts @svmlight_values[0..di].join
+        end
       end
     end
   end
@@ -344,7 +405,7 @@ module SpamFilterEvalTool
           exit 1
         end
       end
-      class_name = (spamicity <= threshold) ? "spam" : "ham"
+      class_name = (spamicity >= threshold) ? "spam" : "ham"
       [class_name, spamicity]
     end
 

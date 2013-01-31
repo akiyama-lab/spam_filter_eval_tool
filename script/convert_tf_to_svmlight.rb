@@ -13,3 +13,4 @@ $weka = Weka.new($config.params["weka"])
 
 $tf_converter = TfConverter.new($sac_reader, $weka)
 $tf_converter.conv_to_svmlight
+$tf_converter.split_and_copy
