@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby
 
 require 'yaml'
+require 'nkf'
 
 if ARGV.size < 1
   $stderr.puts "usage: bogofilter -vvv -d . [-p|-s|-n] < input_file | conv_to_fw.rb arff_file [option]"
@@ -91,7 +92,7 @@ open(@arff_file) do |f|
       line = f.readline
 
       # read words recorded in ARFF file
-      if line.match(/^@attribute\s+([^\s]+)\s+([^\s]+)\s*$/)
+      if NKF.nkf("-w", line).match(/^@attribute\s+([^\s]+)\s+([^\s]+)\s*$/)
         word = $1
         type = $2
         @arff_attrs << {

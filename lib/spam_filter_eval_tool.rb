@@ -31,9 +31,10 @@ module SpamFilterEvalTool
           "jar" => "/Applications/MacPorts/Weka.app/Contents/Resources/Java/weka.jar"
         },
         "svm_perf" => {
-          "svm_classify" => "#{ENV["HOME"]}/local/bin/svm_perf_classify",
+          "svm_classify" => "#{ENV["HOME"]}/local/bin/svm_perf_classify -c 0.01",
           "svm_learn" => "#{ENV["HOME"]}/local/bin/svm_perf_learn",
           "svm_result_file" => "svm_result.txt",
+          "svm_model_type" => "current",
           "feature_vector" => "tf"
         },
         "bogofilter" => {
@@ -331,9 +332,8 @@ module SpamFilterEvalTool
     attr_accessor :params
     def initialize(options)
       @params = {
-        "svm_classify" => "#{ENV["HOME"]}/local/bin/svm_perf_classify",
-        "svm_learn" => "#{ENV["HOME"]}/local/bin/svm_perf_learn",
-        "svm_result_file" => "svm_result.txt"
+        "svm_classify" => "#{ENV["HOME"]}/local/bin/svm_perf_classify -c 0.01",
+        "svm_learn" => "#{ENV["HOME"]}/local/bin/svm_perf_learn"
       }.merge(options)
       @svm_classify = @params["svm_classify"]
       @svm_learn = @params["svm_learn"]
@@ -348,7 +348,7 @@ module SpamFilterEvalTool
     def learn(data, model)
       # FIXME
       # set proper parameters
-      command = "#{@svm_learn} -c 0.001 #{data} #{model}"
+      command = "#{@svm_learn} #{data} #{model}"
       $stderr.puts(command)
       system(command)
     end
@@ -410,20 +410,39 @@ module SpamFilterEvalTool
     end
 
     def evaluate
+      latest_corpus_dir = @sac_reader.svm_span_corpus_dir(@sac_reader.documents.size-1)
+      latest_model = "#{latest_corpus_dir}/model"
       @sac_reader.documents.each_with_index do |doc, di|
         next if di == 0
         svm_span_corpus_dir = @sac_reader.svm_span_corpus_dir(di-1)
-        model = "#{svm_span_corpus_dir}/model"
+        model = ""
         precision = "#{svm_span_corpus_dir}/precision"
         # svm_perf_learn
-        case @svm_perf.params["feature_vector"]
-        when "tf"
-          @svm_perf.learn("#{svm_span_corpus_dir}/#{@weka.svmlight_fname}",
-                          model)
-        when "fw"
-          next if di < 3
-          @svm_perf.learn("#{svm_span_corpus_dir}/fw.txt",
-                          model)
+        case @svm_perf.params["svm_model_type"]
+        when "current"
+          model = "#{svm_span_corpus_dir}/model"
+          case @svm_perf.params["feature_vector"]
+          when "tf"
+            @svm_perf.learn("#{svm_span_corpus_dir}/#{@weka.svmlight_fname}",
+                            model)
+          when "fw"
+            next if di < 3
+            @svm_perf.learn("#{svm_span_corpus_dir}/fw.txt",
+                            model)
+          end
+        when "latest"
+          model = latest_model
+          if !File.exists?(model)
+            case @svm_perf.params["feature_vector"]
+            when "tf"
+              @svm_perf.learn("#{latest_corpus_dir}/#{@weka.svmlight_fname}",
+                              model)
+            when "fw"
+              next if di < 3
+              @svm_perf.learn("#{latest_corpus_dir}/fw.txt",
+                              model)
+            end
+          end
         end
 
         # svm_perf_classify

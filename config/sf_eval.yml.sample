@@ -2,6 +2,7 @@ spam_assassin_corpus_reader:
   #corpus_dir: /path/to/files/spamassassin_corpus
   #svm_corpus_dir: /path/to/files/svm_corpus
   max_doc_num: 1000
+  #max_doc_num: 1000
   #max_doc_num: 300
 svm_corpus_generator:
   word_count: false
@@ -9,10 +10,16 @@ svm_corpus_generator:
 weka:
   #jar: /Applications/MacPorts/Weka.app/Contents/Resources/Java/weka.jar
 svm_perf:
+  svm_classify: /Users/akiyama/local/bin/svm_perf_classify -v 3
+
   #svm_perf_classify: /path/to/command/svm_perf_classify
+  svm_learn: /Users/akiyama/local/bin/svm_perf_learn --b 0 -w 3 -l 0 -c 20
   #svm_perf_learn: /path/to/command/svm_perf_learn
   svm_result_file: svm_result.txt
-  feature_vector: fw
+  svm_model_type: current
+  #svm_model_type: latest
+  feature_vector: tf
+  #feature_vector: fw
 bogofilter:
   #bogofilter: /path/to/command/bogofilter
   bogofilter: /Users/akiyama/local/bin/bogofilter
