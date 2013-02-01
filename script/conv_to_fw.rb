@@ -100,7 +100,7 @@ open(@arff_file) do |f|
           "type" => type
         }
         next
-      elsif line.match(/^\{([^\}]+)\}$/)
+      elsif NKF.nkf("-w", line).match(/^\{([^\}]+)\}$/)
         data = $1
         # output svm light format f(w) values
         data_array = data.split(",").map {|i| i.split(/\s+/)}

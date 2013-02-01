@@ -564,7 +564,7 @@ module SpamFilterEvalTool
     end
 
     def output_result
-      open(@bogofilter_result_file, "a+") do |f|
+      open(@bogofilter_result_file, "w") do |f|
         f.puts @results.join("\n")
       end
     end
