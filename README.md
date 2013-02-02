@@ -29,7 +29,7 @@ Create and edit configuration file.
     % cp config/sf_eval.yml.sample config/sf_eval.yml
     % vi config/sf_eval.yml
 
-corpus_dir, svm_corpus_dir, jar (weka), svm_perf_classify, svm_perf_learn should be modified to fit your environment.
+corpus_dir, svm_corpus_dir, jar (weka), svm_classify, svm_learn should be modified to fit your environment.
 
 ## How to run
 
@@ -46,6 +46,12 @@ Evaluate SVM Light
 
     % ./script/eval_svmlight.rb
 
+Convert SVM Light results (svm score to spamicity)
+
+    % ./script/conv_svm_result.rb svm_result.txt > svm_result.spamicity
+
 ## How to clear data
+
+You can use Rake tasks to clear generated data.
 
     % rake --tasks

@@ -5,6 +5,11 @@ ROOT_PATH = File.expand_path('../../',  __FILE__)
 require "#{ROOT_PATH}/lib/spam_filter_eval_tool"
 include SpamFilterEvalTool
 
+if ARGV.size < 2
+  $stderr.puts "usage: conv_precision.rb model precision"
+  exit 1
+end
+
 $model = ARGV[0]
 $precision = ARGV[1]
 
